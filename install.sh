@@ -78,7 +78,12 @@ HOST=$(hostname -I | awk '{print $1}')
 N8N=${N8N_URL:-}; [ -n "$N8N" ] || read -rp "n8n URL (e.g. http://192.168.1.20:5678, empty = set up n8n by hand): " N8N </dev/tty
 N8N=${N8N%/}
 if [ -n "$N8N" ]; then
-  KEYAPI=${N8N_API_KEY:-}; [ -n "$KEYAPI" ] || { read -rsp "n8n API key (Settings > n8n API): " KEYAPI </dev/tty; echo; }
+  KEYAPI=${N8N_API_KEY:-}
+  if [ -z "$KEYAPI" ]; then
+    echo "n8n API key: in n8n open Settings > n8n API > Create an API key."
+    echo "  How to: https://docs.n8n.io/api/authentication/"
+    read -rsp "n8n API key (hidden): " KEYAPI </dev/tty; echo
+  fi
   [ -n "$KEYAPI" ] || die "n8n API key is empty"
   code=$(curl -s -o /dev/null -w '%{http_code}' -m10 -H "X-N8N-API-KEY: $KEYAPI" "$N8N/api/v1/workflows?limit=1")
   [ "$code" = 200 ] || die "n8n API not reachable or key refused (HTTP $code) at $N8N"

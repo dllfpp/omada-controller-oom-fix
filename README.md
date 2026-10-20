@@ -36,7 +36,7 @@ Run the one-liner at the top on the Proxmox host, as root, after reading the war
 | Controller IP | `192.168.1.10` |
 | Restart the controller now? | `y` / `N` |
 | n8n URL (empty = set up n8n by hand) | `http://192.168.1.20:5678` |
-| n8n API key (hidden input; n8n Settings > n8n API) | |
+| n8n API key (hidden input; n8n Settings > n8n API, see [how to create one](https://docs.n8n.io/api/authentication/)) | |
 
 Then it:
 

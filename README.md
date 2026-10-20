@@ -268,17 +268,31 @@ pct exec <CT> -- sh -c 'for P in $(pgrep jsvc); do tr "\0" " " < /proc/$P/cmdlin
 MaxMetaspaceSize=256m MaxDirectMemorySize=256m MALLOC_ARENA_MAX=2
 ```
 
-### 2.7 Result after 12 hours
+### 2.7 Follow-up check the next day
 
-```
-Mem:  4096 total, 1621 used
-jsvc 1496MB
-mongod 122MB
-no OOM kill in the kernel log
+Commands (read only):
+
+```sh
+grep -E "RESTART|RESULT" /var/log/omada-watchdog.log                       # restarts since the fix
+journalctl -k --since "<date of the fix>" --no-pager | grep -c "oom_memcg=/lxc/<CT>"   # OOM kills
+pct exec <CT> -- systemctl show tpeap -p ActiveEnterTimestamp                # controller uptime
+pct exec <CT> -- sh -c 'free -m | sed -n 2p; for p in jsvc mongod; do echo $p $(ps -o rss= -C $p | sort -n | tail -1 | awk "{print int(\$1/1024)}")MB; done'
+curl -sk -m10 https://<controller-ip>:8043/api/info | grep -o '"omadacId"'  # API answers
 ```
 
-Java grew by about 0.1 GB in 12 hours. If yours keeps growing, also give the container more RAM
-(`pct set <CT> --memory 4096`).
+Results (container raised to 4 GB the same evening, controller up since 21:13):
+
+| Time | Java RSS | MongoDB RSS | Container used | OOM kills | Watchdog restarts |
+|---|---|---|---|---|---|
+| day 0, evening (limits applied) | 1.4 GB | 122 MB | 1.3 GB / 3 GB | - | - |
+| day 1, 09:12 | 1.5 GB | 122 MB | 1.6 GB / 4 GB | 0 | 0 |
+| day 1, 10:13 | 1.8 GB | 125 MB | 1.9 GB / 4 GB | 0 | 0 |
+
+The n8n watchdog ran 16 times, all successful. No OOM kill, API answering.
+
+Java is still growing (0.1 GB overnight, then 0.3 GB in one hour), so the limits slow the growth down
+but are not the whole story yet. Keep watching `java_rss_mb`; the watchdog restarts the controller
+if it dies, and the log keeps the memory figures of each restart for comparison.
 
 ## 3. Watchdog: restart automatically, log for later
 

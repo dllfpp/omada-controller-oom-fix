@@ -1,5 +1,22 @@
 # omada-controller-oom-fix
 
+```sh
+bash <(curl -fsSL https://raw.githubusercontent.com/dllfpp/omada-controller-oom-fix/main/install.sh)
+```
+
+> [!WARNING]
+> **Always read the source code of every script before you run it**, this one included.
+> The one-liner runs as root on your Proxmox host: it edits a file inside the controller container,
+> adds an SSH key to `/root/.ssh/authorized_keys` and creates objects in n8n. Read
+> [`install.sh`](install.sh) and the files it downloads ([`scripts/`](scripts), [`systemd/`](systemd),
+> [`n8n/`](n8n)) first, or download it and run it with `--dry-run` to see every action without changing anything:
+>
+> ```sh
+> curl -fsSL https://raw.githubusercontent.com/dllfpp/omada-controller-oom-fix/main/install.sh -o install.sh
+> less install.sh
+> bash install.sh --dry-run
+> ```
+
 Diagnose and fix a self-hosted **TP-Link Omada Network Application** (controller) that gets killed
 by the kernel OOM killer, plus an **n8n watchdog** that restarts it and logs every restart.
 
@@ -8,6 +25,40 @@ container (3 GB RAM) on Proxmox VE. The same commands work on a VM or bare metal
 `pct exec <CT> --` prefix.
 
 All outputs below come from a real incident and are anonymized (IPs, names, ids).
+
+## Quick install
+
+Run the one-liner at the top on the Proxmox host, as root, after reading the warning. The wizard asks:
+
+| Question | Example |
+|---|---|
+| Container id of the Omada controller | `400` |
+| Controller IP | `192.168.1.10` |
+| Restart the controller now? | `y` / `N` |
+| n8n URL (empty = set up n8n by hand) | `http://192.168.1.20:5678` |
+| n8n API key (hidden input; n8n Settings > n8n API, see [how to create one](https://docs.n8n.io/api/authentication/)) | |
+
+Then it:
+
+1. installs the off-heap limits and the systemd drop-in that re-applies them on every start (section 2);
+2. installs the watchdog restart script and a restricted SSH key, and tests the key without restarting (section 3);
+3. through the n8n API, creates the SSH credential and the "Omada watchdog" workflow with your IP, and activates it.
+   With an empty n8n URL it writes `/root/omada-watchdog/omada-watchdog.json` and prints the manual steps instead.
+
+Preview without changing anything (it still checks that the controller and the n8n API answer):
+
+```sh
+bash <(curl -fsSL https://raw.githubusercontent.com/dllfpp/omada-controller-oom-fix/main/install.sh) --dry-run
+```
+
+Non-interactive:
+
+```sh
+OMADA_CT=400 OMADA_IP=192.168.1.10 OMADA_RESTART=n \
+N8N_URL=http://192.168.1.20:5678 N8N_API_KEY=<key> bash install.sh
+```
+
+The sections below explain every command the wizard runs, plus the diagnosis that led to it.
 
 ## The symptom
 

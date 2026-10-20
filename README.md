@@ -1,5 +1,22 @@
 # omada-controller-oom-fix
 
+```sh
+bash <(curl -fsSL https://raw.githubusercontent.com/dllfpp/omada-controller-oom-fix/main/install.sh)
+```
+
+> [!WARNING]
+> **Always read the source code of every script before you run it**, this one included.
+> The one-liner runs as root on your Proxmox host: it edits a file inside the controller container,
+> adds an SSH key to `/root/.ssh/authorized_keys` and creates objects in n8n. Read
+> [`install.sh`](install.sh) and the files it downloads ([`scripts/`](scripts), [`systemd/`](systemd),
+> [`n8n/`](n8n)) first, or download it and run it with `--dry-run` to see every action without changing anything:
+>
+> ```sh
+> curl -fsSL https://raw.githubusercontent.com/dllfpp/omada-controller-oom-fix/main/install.sh -o install.sh
+> less install.sh
+> bash install.sh --dry-run
+> ```
+
 Diagnose and fix a self-hosted **TP-Link Omada Network Application** (controller) that gets killed
 by the kernel OOM killer, plus an **n8n watchdog** that restarts it and logs every restart.
 
@@ -11,13 +28,7 @@ All outputs below come from a real incident and are anonymized (IPs, names, ids)
 
 ## Quick install
 
-On the Proxmox host, as root:
-
-```sh
-bash <(curl -fsSL https://raw.githubusercontent.com/dllfpp/omada-controller-oom-fix/main/install.sh)
-```
-
-The wizard asks:
+Run the one-liner at the top on the Proxmox host, as root, after reading the warning. The wizard asks:
 
 | Question | Example |
 |---|---|

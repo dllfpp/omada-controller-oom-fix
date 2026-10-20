@@ -1,5 +1,9 @@
 #!/bin/bash
-# omada-controller-oom-fix installer. Run on the Proxmox host as root:
+# omada-controller-oom-fix installer.
+# WARNING: read this whole script, and every file it downloads, before running it.
+# It runs as root, edits control.sh in the controller container, adds an SSH key to
+# /root/.ssh/authorized_keys and creates objects in n8n. Use --dry-run first.
+# Run on the Proxmox host as root:
 #   bash <(curl -fsSL https://raw.githubusercontent.com/dllfpp/omada-controller-oom-fix/main/install.sh)
 # Add --dry-run to only print what it would do.
 # Non-interactive: OMADA_CT=400 OMADA_IP=192.168.1.10 OMADA_RESTART=n \

@@ -9,6 +9,46 @@ container (3 GB RAM) on Proxmox VE. The same commands work on a VM or bare metal
 
 All outputs below come from a real incident and are anonymized (IPs, names, ids).
 
+## Quick install
+
+On the Proxmox host, as root:
+
+```sh
+bash <(curl -fsSL https://raw.githubusercontent.com/dllfpp/omada-controller-oom-fix/main/install.sh)
+```
+
+The wizard asks:
+
+| Question | Example |
+|---|---|
+| Container id of the Omada controller | `400` |
+| Controller IP | `192.168.1.10` |
+| Restart the controller now? | `y` / `N` |
+| n8n URL (empty = set up n8n by hand) | `http://192.168.1.20:5678` |
+| n8n API key (hidden input; n8n Settings > n8n API) | |
+
+Then it:
+
+1. installs the off-heap limits and the systemd drop-in that re-applies them on every start (section 2);
+2. installs the watchdog restart script and a restricted SSH key, and tests the key without restarting (section 3);
+3. through the n8n API, creates the SSH credential and the "Omada watchdog" workflow with your IP, and activates it.
+   With an empty n8n URL it writes `/root/omada-watchdog/omada-watchdog.json` and prints the manual steps instead.
+
+Preview without changing anything (it still checks that the controller and the n8n API answer):
+
+```sh
+bash <(curl -fsSL https://raw.githubusercontent.com/dllfpp/omada-controller-oom-fix/main/install.sh) --dry-run
+```
+
+Non-interactive:
+
+```sh
+OMADA_CT=400 OMADA_IP=192.168.1.10 OMADA_RESTART=n \
+N8N_URL=http://192.168.1.20:5678 N8N_API_KEY=<key> bash install.sh
+```
+
+The sections below explain every command the wizard runs, plus the diagnosis that led to it.
+
 ## The symptom
 
 The controller web UI and API stopped answering. The access points kept working (they do not need

@@ -2,7 +2,8 @@
 # omada-controller-oom-fix installer. Run on the Proxmox host as root:
 #   bash <(curl -fsSL https://raw.githubusercontent.com/dllfpp/omada-controller-oom-fix/main/install.sh)
 # Add --dry-run to only print what it would do.
-# Non-interactive: OMADA_CT=400 OMADA_IP=192.168.1.10 OMADA_RESTART=n bash install.sh
+# Non-interactive: OMADA_CT=400 OMADA_IP=192.168.1.10 OMADA_RESTART=n \
+#   N8N_URL=http://192.168.1.20:5678 N8N_API_KEY=... bash install.sh   (N8N_URL empty = set up n8n by hand)
 set -euo pipefail
 
 REPO=https://raw.githubusercontent.com/dllfpp/omada-controller-oom-fix/main
@@ -57,7 +58,7 @@ run "mkdir -p /root/omada-watchdog"
 run "sed 's/^CT=\${OMADA_CT:-400}/CT=\${OMADA_CT:-$CT}/' $TMP/restart.sh > /root/omada-watchdog/restart.sh"
 run "chmod 700 /root/omada-watchdog/restart.sh"
 [ -f $KEY ] || run "ssh-keygen -q -t ed25519 -N '' -C n8n-omada-watchdog -f $KEY"
-if grep -q n8n-omada-watchdog /root/.ssh/authorized_keys 2>/dev/null; then echo "Key already authorized."
+if [ -f $KEY.pub ] && grep -qF "$(cut -d" " -f2 $KEY.pub)" /root/.ssh/authorized_keys 2>/dev/null; then echo "Key already authorized."
 else
   run "cp /root/.ssh/authorized_keys /root/.ssh/authorized_keys.bak-omada-watchdog"
   run "echo \"command=\\\"/root/omada-watchdog/restart.sh\\\",restrict \$(cat $KEY.pub)\" >> /root/.ssh/authorized_keys"
@@ -70,7 +71,38 @@ say "3/3 n8n workflow"
 OUT=/root/omada-watchdog/omada-watchdog.json
 run "sed 's/OMADA_CONTROLLER_IP/$IP/' $TMP/omada-watchdog.json > $OUT"
 HOST=$(hostname -I | awk '{print $1}')
-cat <<EOF
+N8N=${N8N_URL:-}; [ -n "$N8N" ] || read -rp "n8n URL (e.g. http://192.168.1.20:5678, empty = set up n8n by hand): " N8N </dev/tty
+N8N=${N8N%/}
+if [ -n "$N8N" ]; then
+  KEYAPI=${N8N_API_KEY:-}; [ -n "$KEYAPI" ] || { read -rsp "n8n API key (Settings > n8n API): " KEYAPI </dev/tty; echo; }
+  [ -n "$KEYAPI" ] || die "n8n API key is empty"
+  code=$(curl -s -o /dev/null -w '%{http_code}' -m10 -H "X-N8N-API-KEY: $KEYAPI" "$N8N/api/v1/workflows?limit=1")
+  [ "$code" = 200 ] || die "n8n API not reachable or key refused (HTTP $code) at $N8N"
+  echo "n8n API OK at $N8N"
+  if [ $DRY = 1 ]; then
+    echo "  [dry-run] create n8n credential 'Omada watchdog key' (SSH root@$HOST, key $KEY)"
+    echo "  [dry-run] create and activate workflow 'Omada watchdog' from $OUT"
+  else
+    # the private key goes from file to the n8n API through a pipe, never on the command line
+    cred=$(KEY=$KEY HOST=$HOST python3 -c 'import json,os;print(json.dumps({"name":"Omada watchdog key","type":"sshPrivateKey","data":{"host":os.environ["HOST"],"port":22,"username":"root","privateKey":open(os.environ["KEY"]).read(),"passphrase":""}}))' \
+      | curl -s -m20 -H "X-N8N-API-KEY: $KEYAPI" -H 'Content-Type: application/json' -X POST "$N8N/api/v1/credentials" -d @- \
+      | python3 -c 'import sys,json;print(json.load(sys.stdin).get("id",""))')
+    [ -n "$cred" ] || die "n8n credential not created"
+    wf=$(CRED=$cred python3 -c 'import json,os,sys;w=json.load(open(sys.argv[1]));[n["credentials"]["sshPrivateKey"].update(id=os.environ["CRED"],name="Omada watchdog key") for n in w["nodes"] if "credentials" in n];print(json.dumps(w))' "$OUT" \
+      | curl -s -m20 -H "X-N8N-API-KEY: $KEYAPI" -H 'Content-Type: application/json' -X POST "$N8N/api/v1/workflows" -d @- \
+      | python3 -c 'import sys,json;print(json.load(sys.stdin).get("id",""))')
+    [ -n "$wf" ] || die "n8n workflow not created (credential $cred was created)"
+    act=$(curl -s -m20 -H "X-N8N-API-KEY: $KEYAPI" -X POST "$N8N/api/v1/workflows/$wf/activate" | python3 -c 'import sys,json;print(json.load(sys.stdin).get("active"))')
+    echo "n8n: credential $cred, workflow $wf, active=$act"
+  fi
+  cat <<EOF
+
+Done. n8n checks https://$IP:8043 every hour at minute 17 and restarts the controller if it does not answer.
+Log of every restart: /var/log/omada-watchdog.log
+Test the key any time: ssh -i $KEY root@$HOST test
+EOF
+else
+  cat <<EOF
 
 Done. In n8n:
   1. Credentials > New > SSH Private Key
@@ -81,3 +113,4 @@ Done. In n8n:
 Log of every restart: /var/log/omada-watchdog.log
 Test the key any time: ssh -i $KEY root@$HOST test
 EOF
+fi
